@@ -5,12 +5,13 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
 
+  // Handle Login Submission
   const handleLogin = async (e) => {
     e.preventDefault();
-    
+
     try {
       const response = await fetch("http://localhost:5000/login", {
-        method: "POST",
+        method: "POST", // ✅ POST is best for sensitive info
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
@@ -20,9 +21,9 @@ function LoginPage() {
       if (response.ok) {
         setMessage("✅ Login successful!");
         localStorage.setItem("user", JSON.stringify(data.user));
-        window.location.href = "/dashboard";
+        window.location.href = "/dashboard"; // redirect after login
       } else {
-        setMessage(`❌ ${data.message}`);
+        setMessage("❌ ${data.message}");
       }
     } catch (error) {
       setMessage("⚠ Error connecting to the server.");
@@ -39,7 +40,9 @@ function LoginPage() {
           Welcome back! Please login to continue.
         </p>
 
+        {/* ✅ FORM SECTION */}
         <form onSubmit={handleLogin}>
+          {/* Email Field */}
           <div className="mb-3">
             <label className="form-label fw-semibold">Email address</label>
             <input
@@ -52,6 +55,7 @@ function LoginPage() {
             />
           </div>
 
+          {/* Password Field */}
           <div className="mb-3">
             <label className="form-label fw-semibold">Password</label>
             <input
@@ -64,6 +68,7 @@ function LoginPage() {
             />
           </div>
 
+          {/* ✅ LOGIN BUTTON — stays inside <form> */}
           <button
             type="submit"
             className="btn btn-primary w-100 fw-semibold"
@@ -72,10 +77,14 @@ function LoginPage() {
           </button>
         </form>
 
+        {/* ✅ Message (feedback for user) */}
         {message && (
-          <div className="alert alert-info text-center mt-3 py-2">{message}</div>
+          <div className="alert alert-info text-center mt-3 py-2">
+            {message}
+          </div>
         )}
 
+        {/* Signup Redirect */}
         <p className="text-center mt-3 text-muted">
           Don’t have an account?{" "}
           <a href="/register" className="text-decoration-none text-primary">
