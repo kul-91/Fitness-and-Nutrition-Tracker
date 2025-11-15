@@ -70,7 +70,8 @@ def login():
             "user": {
                 "id": user.user_id,
                 "username": user.username,
-                "email": user.email
+                "email": user.email,
+                "age": user.age
             }
         }), 200
     else:
