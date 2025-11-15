@@ -63,7 +63,7 @@ def login():
     # Find user in database
     user = User.query.filter_by(email=email).first()
 
-    if user and password == "ch234":  # ⚠ Replace this with actual password check
+    if user and password == user.password: 
         # Example: check_password_hash(user.password, password)
         return jsonify({
             "message": "Login successful",
