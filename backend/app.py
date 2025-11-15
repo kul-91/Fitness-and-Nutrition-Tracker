@@ -22,6 +22,27 @@ def create_app():
 
 app = create_app()
 
+# Helper: serialize Decimal/Numeric to python native types
+def numeric_to_native(value):
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return value
+
+def serialize_user(u: User):
+    return {
+        "id": u.user_id,
+        "username": u.username,
+        "email": u.email,
+        "age": u.age,
+        "gender": u.gender,
+        "height_cm": numeric_to_native(u.height_cm),
+        "weight_kg": numeric_to_native(u.weight_kg),
+        "join_date": u.join_date.isoformat() if u.join_date else None
+    }
+
 @app.route('/test_db')
 def test_db():
     try:
@@ -77,5 +98,128 @@ def login():
     else:
         return jsonify({"message": "Invalid email or password"}), 401
     
+# Get current user by id (front sends id in query or path)
+@app.route('/api/user/<int:user_id>', methods=['GET'])
+def get_user(user_id):
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    return jsonify({"user": serialize_user(user)}), 200
+
+# Get summary for dashboard (calories in/out today, recent meals/workouts)
+@app.route('/api/user/<int:user_id>/summary', methods=['GET'])
+def user_summary(user_id):
+    # Today's date filtering can be added; here we return aggregate numbers
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    # Total calories_in/out from progress_log latest entry
+    latest = ProgressLog.query.filter_by(user_id=user_id).order_by(ProgressLog.log_date.desc()).first()
+    calories_in = latest.calories_in if latest else None
+    calories_out = latest.calories_out if latest else None
+
+    # Recent meals (last 5)
+    recent_meals = (
+        db.session.query(Meal, MealFood, FoodItem)
+        .join(MealFood, Meal.meal_id == MealFood.meal_id)
+        .join(FoodItem, MealFood.food_id == FoodItem.food_id)
+        .filter(Meal.user_id == user_id)
+        .order_by(Meal.meal_date.desc())
+        .limit(10)
+        .all()
+    )
+    meals_list = []
+    for meal, mealfood, food in recent_meals:
+        meals_list.append({
+            "meal_id": meal.meal_id,
+            "meal_date": meal.meal_date.isoformat() if meal.meal_date else None,
+            "meal_type": meal.meal_type,
+            "food_name": food.food_name,
+            "quantity": float(mealfood.quantity) if mealfood.quantity is not None else None,
+            "calories_total": float(mealfood.calories_total) if mealfood.calories_total is not None else None
+        })
+
+    # Recent workouts (last 10)
+    recent_workouts = Workout.query.filter_by(user_id=user_id).order_by(Workout.workout_date.desc()).limit(10).all()
+    workouts_list = []
+    for w in recent_workouts:
+        workouts_list.append({
+            "workout_id": w.workout_id,
+            "workout_date": w.workout_date.isoformat() if w.workout_date else None,
+            "workout_type": w.workout_type,
+            "duration_min": w.duration_min,
+            "total_calories_burned": numeric_to_native(w.total_calories_burned)
+        })
+
+    # Basic BMI calculation if height and weight present
+    bmi = None
+    if user.height_cm and user.weight_kg:
+        try:
+            height_m = float(user.height_cm) / 100.0
+            bmi = round(float(user.weight_kg) / (height_m * height_m), 2)
+        except Exception:
+            bmi = None
+
+    return jsonify({
+        "user": serialize_user(user),
+        "calories_in": calories_in,
+        "calories_out": calories_out,
+        "bmi": bmi,
+        "recent_meals": meals_list,
+        "recent_workouts": workouts_list
+    }), 200
+
+# Endpoint to add a meal (simple)
+@app.route('/api/user/<int:user_id>/meals', methods=['POST'])
+def add_meal(user_id):
+    payload = request.get_json() or {}
+    meal_type = payload.get('meal_type')
+    meal_date = payload.get('meal_date')  # expect 'YYYY-MM-DD'
+    foods = payload.get('foods', [])  # list of {food_id, quantity, calories_total}
+    if not meal_date or not foods:
+        return jsonify({"message": "Provide meal_date and foods"}), 400
+
+    m = Meal(user_id=user_id, meal_date=meal_date, meal_type=meal_type, total_calories=sum([f.get('calories_total',0) for f in foods]))
+    db.session.add(m)
+    db.session.commit()
+
+    for f in foods:
+        mf = MealFood(meal_id=m.meal_id, food_id=f['food_id'], quantity=f.get('quantity', 1), calories_total=f.get('calories_total', 0))
+        db.session.add(mf)
+    db.session.commit()
+    return jsonify({"message": "Meal created", "meal_id": m.meal_id}), 201
+
+# Endpoint to add a workout
+@app.route('/api/user/<int:user_id>/workouts', methods=['POST'])
+def add_workout(user_id):
+    payload = request.get_json() or {}
+    workout_date = payload.get('workout_date')
+    workout_type = payload.get('workout_type')
+    duration_min = payload.get('duration_min')
+    calories = payload.get('total_calories_burned', 0)
+
+    w = Workout(user_id=user_id, workout_date=workout_date, workout_type=workout_type, duration_min=duration_min, total_calories_burned=calories)
+    db.session.add(w)
+    db.session.commit()
+    return jsonify({"message": "Workout created", "workout_id": w.workout_id}), 201
+
+# Endpoint to get progress logs
+@app.route('/api/user/<int:user_id>/progress', methods=['GET'])
+def get_progress(user_id):
+    logs = ProgressLog.query.filter_by(user_id=user_id).order_by(ProgressLog.log_date.asc()).all()
+    out = []
+    for l in logs:
+        out.append({
+            "log_id": l.log_id,
+            "log_date": l.log_date.isoformat() if l.log_date else None,
+            "weight_kg": numeric_to_native(l.weight_kg),
+            "bmi": numeric_to_native(l.bmi),
+            "body_fat_percent": numeric_to_native(l.body_fat_percent),
+            "calories_in": l.calories_in,
+            "calories_out": l.calories_out
+        })
+    return jsonify({"progress": out}), 200
+
 if __name__ == "__main__":
     app.run(debug=True)
