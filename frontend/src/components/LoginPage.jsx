@@ -23,7 +23,7 @@ function LoginPage() {
         localStorage.setItem("user", JSON.stringify(data.user));
         window.location.href = "/dashboard"; // redirect after login
       } else {
-        setMessage("❌ ${data.message}");
+        setMessage(`❌ ${data.message}`);
       }
     } catch (error) {
       setMessage("⚠ Error connecting to the server.");
