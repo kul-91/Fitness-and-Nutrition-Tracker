@@ -4,7 +4,7 @@ from extensions import db
 from models import User, Exercise, Meal, Workout, UserProfile, WorkoutExercise, FoodItem, MealFood, Goal, ProgressLog
 from sqlalchemy import text
 from flask import request, jsonify
-from werkzeug.security import check_password_hash  # optional if you store hashed passwords
+from werkzeug.security import check_password_hash, generate_password_hash  # optional if you store hashed passwords
 from flask_cors import CORS
 
 def create_app():
@@ -56,15 +56,15 @@ def login():
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
+    hashed_pw = generate_password_hash(password)
 
     if not email or not password:
         return jsonify({"message": "Missing email or password"}), 400
 
     # Find user in database
     user = User.query.filter_by(email=email).first()
-
-    if user and password == user.password: 
-        # Example: check_password_hash(user.password, password)
+    user.password = hashed_pw
+    if user and check_password_hash(user.password, password): 
         return jsonify({
             "message": "Login successful",
             "user": {
