@@ -2,11 +2,11 @@ from flask import Flask
 from config import Config
 from extensions import db
 from models import User, Exercise, Meal, Workout, UserProfile, WorkoutExercise, FoodItem, MealFood, Goal, ProgressLog
-from sqlalchemy import text
+from sqlalchemy import text, func
 from flask import request, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash  # optional if you store hashed passwords
 from flask_cors import CORS
-
+from datetime import date
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -115,10 +115,20 @@ def user_summary(user_id):
         return jsonify({"message": "User not found"}), 404
 
     # Total calories_in/out from progress_log latest entry
-    latest = ProgressLog.query.filter_by(user_id=user_id).order_by(ProgressLog.log_date.desc()).first()
-    calories_in = latest.calories_in if latest else None
-    calories_out = latest.calories_out if latest else None
+    today = date.today()
+    calories_out = (db.session.query(
+        func.sum(Workout.total_calories_burned)
+    ).filter(Workout.user_id == user_id)
+     .filter(Workout.workout_date == today)
+     .scalar() ) or 0
+    # Total calories in: we keep progress log or calculate from meals
+    calories_in = db.session.query(
+        func.sum(MealFood.calories_total)
+    ).join(Meal, MealFood.meal_id == Meal.meal_id)\
+    .filter(Meal.user_id == user_id)\
+    .scalar() or 0
 
+    
     # Recent meals (last 5)
     recent_meals = (
         db.session.query(Meal, MealFood, FoodItem)
