@@ -6,7 +6,7 @@ from sqlalchemy import text, func
 from flask import request, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash  # optional if you store hashed passwords
 from flask_cors import CORS
-from datetime import date
+from datetime import datetime, date, timedelta
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -77,15 +77,13 @@ def login():
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
-    hashed_pw = generate_password_hash(password)
 
     if not email or not password:
         return jsonify({"message": "Missing email or password"}), 400
 
-    # Find user in database
     user = User.query.filter_by(email=email).first()
-    user.password = hashed_pw
-    if user and check_password_hash(user.password, password): 
+
+    if user and check_password_hash(user.password, password):
         return jsonify({
             "message": "Login successful",
             "user": {
@@ -97,6 +95,7 @@ def login():
         }), 200
     else:
         return jsonify({"message": "Invalid email or password"}), 401
+
     
 # Get current user by id (front sends id in query or path)
 @app.route('/api/user/<int:user_id>', methods=['GET'])
@@ -116,17 +115,21 @@ def user_summary(user_id):
 
     # Total calories_in/out from progress_log latest entry
     today = date.today()
-    calories_out = (db.session.query(
-        func.sum(Workout.total_calories_burned)
-    ).filter(Workout.user_id == user_id)
-     .filter(Workout.workout_date == today)
-     .scalar() ) or 0
-    # Total calories in: we keep progress log or calculate from meals
-    calories_in = db.session.query(
-        func.sum(MealFood.calories_total)
-    ).join(Meal, MealFood.meal_id == Meal.meal_id)\
-    .filter(Meal.user_id == user_id)\
-    .scalar() or 0
+    calories_in = (
+    db.session.query(func.sum(MealFood.calories_total))
+    .join(Meal, MealFood.meal_id == Meal.meal_id)
+    .filter(Meal.user_id == user_id)
+    .filter(Meal.meal_date == today)
+    .scalar()
+    ) or 0
+
+    calories_out = (
+        db.session.query(func.sum(Workout.total_calories_burned))
+        .filter(Workout.user_id == user_id)
+        .filter(Workout.workout_date == today)
+        .scalar()
+    ) or 0
+
 
     
     # Recent meals (last 5)
@@ -185,7 +188,7 @@ def user_summary(user_id):
 def add_meal(user_id):
     payload = request.get_json() or {}
     meal_type = payload.get('meal_type')
-    meal_date = payload.get('meal_date')  # expect 'YYYY-MM-DD'
+    meal_date = datetime.strptime(payload.get('workout_date'), "%Y-%m-%d").date()
     foods = payload.get('foods', [])  # list of {food_id, quantity, calories_total}
     if not meal_date or not foods:
         return jsonify({"message": "Provide meal_date and foods"}), 400
@@ -204,12 +207,15 @@ def add_meal(user_id):
 @app.route('/api/user/<int:user_id>/workouts', methods=['POST'])
 def add_workout(user_id):
     payload = request.get_json() or {}
-    workout_date = payload.get('workout_date')
+    workout_date = datetime.strptime(payload.get('workout_date'), "%Y-%m-%d").date()
+    if (datetime.now().date() - workout_date).days == 1:
+        workout_date = workout_date + timedelta(days=1)
     workout_type = payload.get('workout_type')
-    duration_min = payload.get('duration_min')
-    calories = payload.get('total_calories_burned', 0)
+    duration_min = int(payload.get('duration_min'))
+    calories_out = duration_min * 7.5
 
-    w = Workout(user_id=user_id, workout_date=workout_date, workout_type=workout_type, duration_min=duration_min, total_calories_burned=calories)
+
+    w = Workout(user_id=user_id, workout_date=workout_date, workout_type=workout_type, duration_min=duration_min, total_calories_burned=calories_out)
     db.session.add(w)
     db.session.commit()
     return jsonify({"message": "Workout created", "workout_id": w.workout_id}), 201
