@@ -1,4 +1,4 @@
-// src/pages/Dashboard.jsx
+// src/pages/Dashboard.js
 import React, { useEffect, useState } from "react";
 
 function Dashboard() {
@@ -14,7 +14,21 @@ function Dashboard() {
   const [showWorkoutForm, setShowWorkoutForm] = useState(false);
   const [workoutType, setWorkoutType] = useState("");
   const [durationMin, setDurationMin] = useState("");
+  const [showMealForm, setShowMealForm] = useState(false);
 
+  const [mealForm, setMealForm] = useState({
+    meal_type: "",
+    meal_date: new Date().toISOString().slice(0, 10),
+    foods: [
+      { food_name: "", quantity: 1 }
+    ]
+  });
+
+  const updateFood = (index, field, value) => {
+    const updated = [...mealForm.foods];
+    updated[index][field] = value;
+    setMealForm({ ...mealForm, foods: updated });
+  };
 
   useEffect(() => {
     if (!user) {
@@ -92,6 +106,66 @@ function Dashboard() {
     }
   };
 
+  const addFoodRow = () => {
+  setMealForm({
+      ...mealForm,
+      foods: [...mealForm.foods, { food_name: "", quantity: 1 }]
+    });
+  };
+
+  const removeFoodRow = (index) => {
+    const updated = mealForm.foods.filter((_, i) => i !== index);
+    setMealForm({ ...mealForm, foods: updated });
+  };
+
+  const handleAddMeal = async () => {
+    if (!mealForm.meal_type) {
+      return alert("Select meal type");
+    }
+
+    const payload = {
+      meal_type: mealForm.meal_type,
+      meal_date: mealForm.meal_date,
+      foods: mealForm.foods
+        .filter(f => f.food_name.trim() !== "") // ignore empty rows
+        .map(f => ({
+            food_name: f.food_name,
+            quantity: parseFloat(f.quantity)
+        }))
+    };
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/user/${user.id}/meals`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!res.ok) throw new Error("Failed to add meal");
+
+      const updated = await fetch(
+        `http://localhost:5000/api/user/${user.id}/summary`
+      ).then((r) => r.json());
+
+      setSummary(updated);
+      setShowMealForm(false);
+
+      // Reset
+      setMealForm({
+        meal_type: "",
+        meal_date: new Date().toISOString().slice(0, 10),
+        foods: [{ food_name: "", quantity: 1 }]
+      });
+
+    } catch (error) {
+      alert(error.message);
+    }
+  };
+
+
   if (!user) return null;
 
   return (
@@ -112,6 +186,12 @@ function Dashboard() {
           >
             Add Workout
           </button>
+          <button 
+          className="btn btn-success ms-2" 
+          onClick={() => setShowMealForm(true)}
+        >
+          Add Meal
+        </button>
         </div>
       </div>
 
@@ -159,6 +239,80 @@ function Dashboard() {
           </button>
         </div>
       )}
+
+    {showMealForm && (
+      <div className="card p-3 mt-4 shadow">
+        <h5>Add Meal</h5>
+
+        <div className="mb-3">
+          <label>Meal Type</label>
+          <input
+            className="form-control"
+            value={mealForm.meal_type}
+            onChange={(e) =>
+              setMealForm({ ...mealForm, meal_type: e.target.value })
+            }
+            placeholder="Breakfast / Lunch / Dinner"
+          />
+        </div>
+
+        <h6>Food Items</h6>
+
+        {mealForm.foods.map((item, index) => (
+          <div key={index} className="row mb-2">
+            <div className="col-md-5">
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Food name"
+                value={item.food_name}
+                onChange={(e) => updateFood(index, "food_name", e.target.value)}
+              />
+            </div>
+
+            <div className="col-md-3">
+              <input
+                type="number"
+                className="form-control"
+                placeholder="Qty"
+                value={item.quantity}
+                onChange={(e) => updateFood(index, "quantity", e.target.value)}
+              />
+            </div>
+
+            <div className="col-md-2">
+              <button
+                className="btn btn-danger"
+                onClick={() => removeFoodRow(index)}
+                disabled={mealForm.foods.length === 1}
+              >
+                X
+              </button>
+            </div>
+          </div>
+        ))}
+
+        <button className="btn btn-secondary mb-3" onClick={addFoodRow}>
+          + Add More Food
+        </button>
+
+        <br />
+
+        <button className="btn btn-success me-2" onClick={handleAddMeal}>
+          Save Meal
+        </button>
+
+        <button
+          className="btn btn-outline-secondary"
+          onClick={() => setShowMealForm(false)}
+        >
+          Cancel
+        </button>
+      </div>
+    )}
+
+
+
 
       {/* Summary Cards */}
       {summary && (

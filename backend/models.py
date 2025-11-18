@@ -83,7 +83,7 @@ class Meal(db.Model):
 class FoodItem(db.Model):
     __tablename__ = 'food_item'
 
-    food_id = db.Column(db.Integer, primary_key=True)
+    food_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     food_name = db.Column(db.String(50))
     category = db.Column(db.String(50))
     calories_per_unit = db.Column(db.Numeric(6, 2))
