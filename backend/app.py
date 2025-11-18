@@ -130,8 +130,6 @@ def user_summary(user_id):
         .scalar()
     ) or 0
 
-
-    
     # Recent meals (last 5)
     recent_meals = (
         db.session.query(Meal, MealFood, FoodItem)
@@ -187,21 +185,60 @@ def user_summary(user_id):
 @app.route('/api/user/<int:user_id>/meals', methods=['POST'])
 def add_meal(user_id):
     payload = request.get_json() or {}
-    meal_type = payload.get('meal_type')
-    meal_date = datetime.strptime(payload.get('workout_date'), "%Y-%m-%d").date()
-    foods = payload.get('foods', [])  # list of {food_id, quantity, calories_total}
-    if not meal_date or not foods:
-        return jsonify({"message": "Provide meal_date and foods"}), 400
 
-    m = Meal(user_id=user_id, meal_date=meal_date, meal_type=meal_type, total_calories=sum([f.get('calories_total',0) for f in foods]))
-    db.session.add(m)
+    meal_type = payload.get("meal_type")
+    meal_date = payload.get("meal_date")
+    foods = payload.get("foods", [])
+
+    if not meal_type or not meal_date or not foods:
+        return jsonify({"message": "Missing fields"}), 400
+
+    total_meal_calories = 0
+
+    # Create meal entry first
+    meal = Meal(
+        user_id=user_id,
+        meal_date=meal_date,
+        meal_type=meal_type,
+        total_calories=0
+    )
+    db.session.add(meal)
     db.session.commit()
 
     for f in foods:
-        mf = MealFood(meal_id=m.meal_id, food_id=f['food_id'], quantity=f.get('quantity', 1), calories_total=f.get('calories_total', 0))
-        db.session.add(mf)
+        food_name = f["food_name"]
+        quantity = float(f.get("quantity", 1))
+
+        food = FoodItem.query.filter_by(food_name=food_name).first()
+
+        if not food:
+            food = FoodItem(
+                food_name=food_name,
+                category="General",
+                calories_per_unit=120,
+                protein_g=0,
+                carbs_g=0,
+                fat_g=0,
+                unit="unit"
+            )
+            db.session.add(food)
+            db.session.commit()
+
+        calories_total = float(food.calories_per_unit) * quantity
+        total_meal_calories += calories_total
+
+        meal_food = MealFood(
+            meal_id=meal.meal_id,
+            food_id=food.food_id,
+            quantity=quantity,
+            calories_total=calories_total
+        )
+        db.session.add(meal_food)
+
+    meal.total_calories = total_meal_calories
     db.session.commit()
-    return jsonify({"message": "Meal created", "meal_id": m.meal_id}), 201
+
+    return jsonify({"message": "Meal added", "meal_id": meal.meal_id}), 201
 
 # Endpoint to add a workout
 @app.route('/api/user/<int:user_id>/workouts', methods=['POST'])
