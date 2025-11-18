@@ -5,6 +5,7 @@ import LoginPage from "./components/LoginPage";
 import Dashboard from "./pages/Dashboard";
 
 import "bootstrap/dist/css/bootstrap.min.css";
+import Signup from "./pages/Signup";
 
 function App() {
   return (
@@ -19,6 +20,11 @@ function App() {
 
         {/* Dashboard Route */}
         <Route path="/dashboard" element={<Dashboard />} />
+
+      
+
+       <Route path="/signup" element={<Signup />} />
+
 
       </Routes>
     </Router>
