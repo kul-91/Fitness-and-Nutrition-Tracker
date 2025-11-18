@@ -105,6 +105,63 @@ def get_user(user_id):
         return jsonify({"message": "User not found"}), 404
     return jsonify({"user": serialize_user(user)}), 200
 
+@app.route('/signup', methods=['POST'])
+def signup():
+    data = request.get_json() or {}
+
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
+    age = data.get('age')
+    gender = data.get('gender')
+    height_cm = data.get('height_cm')
+    weight_kg = data.get('weight_kg')
+
+    if not username or not email or not password or not age or not gender or not height_cm or not weight_kg:
+        return jsonify({"message": "All fields are required"}), 400
+
+    existing_user = User.query.filter_by(email=email).first()
+    if existing_user:
+        return jsonify({"message": "Email already registered"}), 409
+
+    hashed_pw = generate_password_hash(password)
+
+    # BMI calculation
+    try:
+        h = float(height_cm) / 100
+        bmi = round(float(weight_kg) / (h * h), 2)
+    except:
+        bmi = None
+
+    new_user = User(
+        username=username,
+        email=email,
+        password=hashed_pw,
+        age=age,
+        gender=gender,
+        height_cm=height_cm,
+        weight_kg=weight_kg,
+        join_date=date.today()
+    )
+
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Signup successful",
+        "user": {
+            "id": new_user.user_id,
+            "username": new_user.username,
+            "email": new_user.email,
+            "age": new_user.age,
+            "gender": new_user.gender,
+            "height_cm": new_user.height_cm,
+            "weight_kg": new_user.weight_kg,
+            "bmi": bmi
+        }
+    }), 201
+
+
 # Get summary for dashboard (calories in/out today, recent meals/workouts)
 @app.route('/api/user/<int:user_id>/summary', methods=['GET'])
 def user_summary(user_id):
@@ -202,6 +259,7 @@ def add_meal(user_id):
         db.session.add(mf)
     db.session.commit()
     return jsonify({"message": "Meal created", "meal_id": m.meal_id}), 201
+
 
 # Endpoint to add a workout
 @app.route('/api/user/<int:user_id>/workouts', methods=['POST'])

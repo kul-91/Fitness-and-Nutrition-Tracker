@@ -87,7 +87,7 @@ function LoginPage() {
         {/* Signup Redirect */}
         <p className="text-center mt-3 text-muted">
           Don’t have an account?{" "}
-          <a href="/register" className="text-decoration-none text-primary">
+          <a href="/signup" className="text-decoration-none text-primary">
             Sign up
           </a>
         </p>
