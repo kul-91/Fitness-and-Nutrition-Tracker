@@ -34,8 +34,12 @@ function Signup() {
       return;
     }
 
-    alert("Signup successful! Please login.");
-    window.location.href = "/login";
+     // Save logged in user details to localStorage
+     localStorage.setItem("user", JSON.stringify(data.user));
+
+      // Redirect directly to Dashboard
+      window.location.href = "/dashboard";
+
   };
 
   return (
