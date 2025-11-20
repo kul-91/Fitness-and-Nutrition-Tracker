@@ -37,7 +37,7 @@ function LoginPage() {
           Fitness & Nutrition Tracker
         </h2>
         <p className="text-center text-muted mb-4">
-          Welcome back! Please login to continue.
+           Hello! Please login to continue.
         </p>
 
         {/* ✅ FORM SECTION */}

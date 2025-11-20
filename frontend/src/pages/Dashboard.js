@@ -10,11 +10,21 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Workout form state
   const [showWorkoutForm, setShowWorkoutForm] = useState(false);
-  const [workoutType, setWorkoutType] = useState("");
-  const [durationMin, setDurationMin] = useState("");
   const [showMealForm, setShowMealForm] = useState(false);
+// Multi-exercise workout
+  const [workoutForm, setWorkoutForm] = useState({
+  workout_type: "",
+  workout_date: new Date().toISOString().slice(0, 10),
+  exercises: [{ exercise_name: "", duration_min: "" }]
+  });
+
+  const [expandedWorkout, setExpandedWorkout] = useState(null);
+
+  const toggleWorkoutExpand = (id) => {
+    setExpandedWorkout(expandedWorkout === id ? null : id);
+  };
+
 
   const [mealForm, setMealForm] = useState({
     meal_type: "",
@@ -66,19 +76,25 @@ function Dashboard() {
 
   // Submit new workout
   const handleAddWorkout = async () => {
-    if (!workoutType || !durationMin) {
-      alert("Please enter workout name and duration.");
-      return;
+    const validExercises = workoutForm.exercises.filter(
+      ex => ex.exercise_name.trim() !== "" && ex.duration_min !== ""
+    );
+
+    if (validExercises.length === 0) {
+      return alert("Please add at least one exercise.");
     }
 
-    try {
-      const payload = {
-        workout_date: new Date().toISOString().slice(0, 10),
-        workout_type: workoutType,
-        duration_min: parseInt(durationMin),
-        total_calories_burned: 143,
-      };
+    const payload = {
+      workout_type: workoutForm.workout_type,   // ADD THIS
+      workout_date: workoutForm.workout_date,
+      exercises: validExercises.map(ex => ({
+        exercise_name: ex.exercise_name,
+        duration_min: parseInt(ex.duration_min)
+      }))
+    };
 
+
+    try {
       const res = await fetch(
         `http://localhost:5000/api/user/${user.id}/workouts`,
         {
@@ -90,21 +106,43 @@ function Dashboard() {
 
       if (!res.ok) throw new Error("Failed to add workout");
 
-      // Refresh summary after adding
       const newSummary = await fetch(
         `http://localhost:5000/api/user/${user.id}/summary`
-      ).then((r) => r.json());
+      ).then(r => r.json());
 
       setSummary(newSummary);
+      setShowWorkoutForm(false);
 
       // Reset form
-      setWorkoutType("");
-      setDurationMin("");
-      setShowWorkoutForm(false);
+      setWorkoutForm({
+        workout_type: "",
+        workout_date: new Date().toISOString().slice(0, 10),
+        exercises: [{ exercise_name: "", duration_min: "" }]
+      });
+
+
     } catch (error) {
       alert(error.message);
     }
   };
+
+  const updateExercise = (index, field, value) => {
+  const updated = [...workoutForm.exercises];
+  updated[index][field] = value;
+  setWorkoutForm({ ...workoutForm, exercises: updated });
+};
+
+const addExerciseRow = () => {
+  setWorkoutForm({
+    ...workoutForm,
+    exercises: [...workoutForm.exercises, { exercise_name: "", duration_min: "" }]
+  });
+};
+
+const removeExerciseRow = (index) => {
+  const updated = workoutForm.exercises.filter((_, i) => i !== index);
+  setWorkoutForm({ ...workoutForm, exercises: updated });
+};
 
   const addFoodRow = () => {
   setMealForm({
@@ -199,46 +237,89 @@ function Dashboard() {
       {error && <div className="alert alert-danger mt-4">{error}</div>}
 
       {/* Workout Form */}
-      {showWorkoutForm && (
-        <div className="card p-3 mt-4 shadow">
-          <h5>Add Workout</h5>
+{showWorkoutForm && (
+  <div className="card p-3 mt-4 shadow">
+    <h5>Add Workout</h5>
 
-          <div className="mb-3">
-            <label className="form-label">Workout Name / Type</label>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="e.g., Running, Pushups"
-              value={workoutType}
-              onChange={(e) => setWorkoutType(e.target.value)}
-              required
-            />
-          </div>
+    <div className="mb-3">
+      <label>Workout Type</label>
+      <input
+        type="text"
+        className="form-control"
+        placeholder="Push Day / Leg Day / Cardio"
+        value={workoutForm.workout_type}
+        onChange={(e) =>
+          setWorkoutForm({ ...workoutForm, workout_type: e.target.value })
+        }
+      />
+    </div>
 
-          <div className="mb-3">
-            <label className="form-label">Duration (minutes)</label>
-            <input
-              type="number"
-              className="form-control"
-              placeholder="e.g., 30"
-              value={durationMin}
-              onChange={(e) => setDurationMin(e.target.value)}
-              required
-            />
-          </div>
+    <div className="mb-3">
+      <label>Date</label>
+      <input
+        type="date"
+        className="form-control"
+        value={workoutForm.workout_date}
+        onChange={(e) =>
+          setWorkoutForm({ ...workoutForm, workout_date: e.target.value })
+        }
+      />
+    </div>
 
-          <button className="btn btn-success me-2" onClick={handleAddWorkout}>
-            Save Workout
-          </button>
+    <h6>Exercises</h6>
 
+    {workoutForm.exercises.map((ex, index) => (
+      <div key={index} className="row mb-2">
+        <div className="col-md-5">
+          <input
+            type="text"
+            className="form-control"
+            placeholder="Exercise name"
+            value={ex.exercise_name}
+            onChange={(e) => updateExercise(index, "exercise_name", e.target.value)}
+          />
+        </div>
+
+        <div className="col-md-3">
+          <input
+            type="number"
+            className="form-control"
+            placeholder="Duration"
+            value={ex.duration_min}
+            onChange={(e) => updateExercise(index, "duration_min", e.target.value)}
+          />
+        </div>
+
+        <div className="col-md-2">
           <button
-            className="btn btn-secondary"
-            onClick={() => setShowWorkoutForm(false)}
+            className="btn btn-danger"
+            onClick={() => removeExerciseRow(index)}
+            disabled={workoutForm.exercises.length === 1}
           >
-            Cancel
+            X
           </button>
         </div>
-      )}
+      </div>
+    ))}
+
+    <button className="btn btn-secondary mb-3" onClick={addExerciseRow}>
+      + Add Exercise
+    </button>
+
+    <button className="btn btn-success me-2" onClick={handleAddWorkout}>
+      Save Workout
+    </button>
+
+    <button
+      className="btn btn-outline-secondary"
+      onClick={() => setShowWorkoutForm(false)}
+    >
+      Cancel
+    </button>
+  </div>
+)}
+
+
 
     {showMealForm && (
       <div className="card p-3 mt-4 shadow">
@@ -404,7 +485,25 @@ function Dashboard() {
                       {summary.recent_workouts.map((w) => (
                         <tr key={w.workout_id}>
                           <td>{w.workout_date}</td>
-                          <td>{w.workout_type}</td>
+                          <td>
+                            <button
+                              className="btn btn-link p-0"
+                              onClick={() => toggleWorkoutExpand(w.workout_id)}
+                            >
+                              {w.workout_type}
+                            </button>
+
+                            {expandedWorkout === w.workout_id && (
+                              <ul>
+                                {w.exercises && w.exercises.length > 0 && w.exercises.map((ex, i) => (
+                                  <li key={i}>
+                                    {ex.exercise_name} — {ex.duration_min} min
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </td>
+
                           <td>{w.duration_min}</td>
                           <td>{w.total_calories_burned}</td>
                         </tr>

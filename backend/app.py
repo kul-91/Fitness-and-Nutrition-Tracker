@@ -212,13 +212,25 @@ def user_summary(user_id):
     recent_workouts = Workout.query.filter_by(user_id=user_id).order_by(Workout.workout_date.desc()).limit(10).all()
     workouts_list = []
     for w in recent_workouts:
+        exercises = WorkoutExercise.query.filter_by(workout_id=w.workout_id).all()
+
+        exercise_list = []
+        for ex in exercises:
+            exercise_list.append({
+                "exercise_name": ex.exercise.exercise_name,
+                "duration_min": ex.duration_min,
+                "calories_burned": ex.calories_burned
+            })
+
         workouts_list.append({
             "workout_id": w.workout_id,
             "workout_date": w.workout_date.isoformat() if w.workout_date else None,
             "workout_type": w.workout_type,
-            "duration_min": w.duration_min,
-            "total_calories_burned": numeric_to_native(w.total_calories_burned)
+            "duration_min": sum(ex.duration_min for ex in exercises),
+            "total_calories_burned": numeric_to_native(w.total_calories_burned),
+            "exercises": exercise_list      # ADD THIS
         })
+
 
     # Basic BMI calculation if height and weight present
     bmi = None
@@ -302,18 +314,65 @@ def add_meal(user_id):
 @app.route('/api/user/<int:user_id>/workouts', methods=['POST'])
 def add_workout(user_id):
     payload = request.get_json() or {}
-    workout_date = datetime.strptime(payload.get('workout_date'), "%Y-%m-%d").date()
-    if (datetime.now().date() - workout_date).days == 1:
-        workout_date = workout_date + timedelta(days=1)
-    workout_type = payload.get('workout_type')
-    duration_min = int(payload.get('duration_min'))
-    calories_out = duration_min * 7.5
 
+    workout_type = payload.get("workout_type")
+    workout_date = payload.get("workout_date")
+    exercises = payload.get("exercises", [])
 
-    w = Workout(user_id=user_id, workout_date=workout_date, workout_type=workout_type, duration_min=duration_min, total_calories_burned=calories_out)
-    db.session.add(w)
+    if not workout_type or not workout_date or len(exercises) == 0:
+        return jsonify({"message": "Missing required fields"}), 400
+
+    # Create main workout entry
+    workout = Workout(
+        user_id=user_id,
+        workout_type=workout_type,
+        workout_date=datetime.strptime(workout_date, "%Y-%m-%d").date(),
+        total_calories_burned=0
+    )
+    db.session.add(workout)
     db.session.commit()
-    return jsonify({"message": "Workout created", "workout_id": w.workout_id}), 201
+
+    total_calories = 0
+
+    for ex in exercises:
+        name = ex["exercise_name"]
+        duration = int(ex["duration_min"])
+
+        # Check if exercise exists
+        exercise = Exercise.query.filter_by(exercise_name=name).first()
+        if not exercise:
+            exercise = Exercise(
+                exercise_name=name,
+                category="General",
+                muscle_group="General",
+                calories_per_min=7.5,  # default
+                difficulty="Medium"
+            )
+            db.session.add(exercise)
+            db.session.commit()
+
+        # Calculate calories
+        calories = float(exercise.calories_per_min) * duration
+        total_calories += calories
+
+        # Link entry
+        link = WorkoutExercise(
+            workout_id=workout.workout_id,
+            exercise_id=exercise.exercise_id,
+            duration_min=duration,
+            calories_burned=calories,
+            intensity_level="Normal"
+        )
+        db.session.add(link)
+
+    workout.total_calories_burned = total_calories
+    db.session.commit()
+
+    return jsonify({
+        "message": "Workout added",
+        "workout_id": workout.workout_id
+    }), 201
+
 
 # Endpoint to get progress logs
 @app.route('/api/user/<int:user_id>/progress', methods=['GET'])
